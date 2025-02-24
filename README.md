@@ -105,6 +105,55 @@ Example Request:
 GET http://localhost:3000/api/anime/sources?movieId=vRPjMA&episode=1&server=4&subOrDub=sub
 ```
 
+### Get HLS Link
+
+```
+GET /api/anime/hls/{animeId}?episode={ep}&server={id}&subOrDub={type}
+```
+
+Fetches HLS (HTTP Live Streaming) links with additional metadata for a specific episode.
+
+Query Parameters:
+- `episode` (optional): Episode number (default: 1)
+- `server` (optional): Server number (default: 4)
+- `subOrDub` (optional): "sub" or "dub" (default: "sub")
+
+Example Request:
+```
+GET http://localhost:3000/api/anime/hls/vRPjMA?episode=1&server=4&subOrDub=sub
+```
+
+Example Response:
+```json
+{
+    "status": true,
+    "result": {
+        "sources": [
+            {
+                "file": "https://example.com/hls/video.m3u8",
+                "type": "hls"
+            }
+        ],
+        "tracks": [
+            {
+                "file": "https://example.com/subtitles.vtt",
+                "label": "English",
+                "kind": "captions"
+            }
+        ],
+        "intro": {
+            "start": 0,
+            "end": 90
+        },
+        "outro": {
+            "start": 1290,
+            "end": 1380
+        },
+        "server": 4
+    }
+}
+```
+
 ### Health Check
 
 ```
