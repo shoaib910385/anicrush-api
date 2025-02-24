@@ -307,7 +307,7 @@ async function mapAniListToAnicrush(anilistId) {
             name: ep.name,
             name_english: ep.name_english,
             is_filler: ep.is_filler,
-            id: `${bestMatch.id}&episode=${ep.number}`
+            id: `${bestMatch.id}?episode=${ep.number}`
         }));
 
         return {
