@@ -81,7 +81,7 @@ Query Parameters:
 ### Get Servers
 
 ```
-GET /api/anime/servers
+GET /api/anime/servers/{id}
 ```
 
 Query Parameters:
