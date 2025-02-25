@@ -102,9 +102,10 @@ app.get('/api/anime/episodes', async (req, res) => {
 });
 
 // Endpoint to fetch servers for an episode
-app.get('/api/anime/servers', async (req, res) => {
+app.get('/api/anime/servers/:movieId', async (req, res) => {
     try {
-        const { movieId, episode } = req.query;
+        const { movieId } = req.params;
+        const { episode } = req.query;
 
         if (!movieId) {
             return res.status(400).json({ error: 'Movie ID is required' });
