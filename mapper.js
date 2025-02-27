@@ -268,11 +268,32 @@ function parseEpisodeList(episodeList) {
     return episodes.sort((a, b) => a.number - b.number);
 }
 
+// Function to fetch ani.zip mappings
+async function getAniZipMappings(anilistId) {
+    try {
+        const response = await axios({
+            method: 'GET',
+            url: `https://api.ani.zip/mappings?anilist_id=${anilistId}`,
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching ani.zip mappings:', error.message);
+        return null;
+    }
+}
+
 // Main mapper function
 async function mapAniListToAnicrush(anilistId) {
     try {
         // Get AniList details
         const anilistData = await getAniListDetails(anilistId);
+        
+        // Get ani.zip mappings for episode images
+        const aniZipData = await getAniZipMappings(anilistId);
         
         // Try all possible titles for search
         const titlesToTry = [
@@ -301,14 +322,21 @@ async function mapAniListToAnicrush(anilistId) {
         const episodeList = await getEpisodeList(bestMatch.id);
         const parsedEpisodes = parseEpisodeList(episodeList);
 
-        // Create episode mapping
-        const episodes = parsedEpisodes.map(ep => ({
-            number: ep.number,
-            name: ep.name,
-            name_english: ep.name_english,
-            is_filler: ep.is_filler,
-            id: `${bestMatch.id}?episode=${ep.number}`
-        }));
+        // Create episode mapping with images from ani.zip
+        const episodes = parsedEpisodes.map(ep => {
+            const aniZipEpisode = aniZipData?.episodes?.[ep.number] || {};
+            return {
+                number: ep.number,
+                name: ep.name,
+                name_english: ep.name_english,
+                is_filler: ep.is_filler,
+                id: `${bestMatch.id}?episode=${ep.number}`,
+                image: aniZipEpisode.image || null,
+                overview: aniZipEpisode.overview || null,
+                airDate: aniZipEpisode.airDate || null,
+                runtime: aniZipEpisode.runtime || null
+            };
+        });
 
         return {
             anilist_id: anilistId,
@@ -319,7 +347,8 @@ async function mapAniListToAnicrush(anilistId) {
                 native: anilistData.title.native,
                 synonyms: anilistData.synonyms,
                 anicrush: bestMatch.name,
-                anicrush_english: bestMatch.name_english
+                anicrush_english: bestMatch.name_english,
+                additional: aniZipData?.titles || {}
             },
             type: bestMatch.type,
             total_episodes: episodes.length,
@@ -330,7 +359,8 @@ async function mapAniListToAnicrush(anilistId) {
             genres: bestMatch.genres,
             country_of_origin: anilistData.countryOfOrigin,
             year: anilistData.seasonYear,
-            description: anilistData.description
+            description: anilistData.description,
+            images: aniZipData?.images || []
         };
 
     } catch (error) {
@@ -341,5 +371,6 @@ async function mapAniListToAnicrush(anilistId) {
 
 module.exports = {
     mapAniListToAnicrush,
-    getCommonHeaders
+    getCommonHeaders,
+    getAniZipMappings
 }; 
