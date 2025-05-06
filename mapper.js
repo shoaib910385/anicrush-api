@@ -211,6 +211,19 @@ function findBestMatch(anilistData, anicrushResults) {
     let bestMatch = null;
     let highestSimilarity = 0;
 
+    // Map AniList format to Anicrush type
+    const formatTypeMap = {
+        'TV': 'TV',
+        'TV_SHORT': 'TV',
+        'MOVIE': 'MOVIE',
+        'SPECIAL': 'SPECIAL',
+        'OVA': 'OVA',
+        'ONA': 'ONA',
+        'MUSIC': 'MUSIC'
+    };
+    
+    const expectedType = formatTypeMap[anilistData.format] || null;
+
     // Check each result from anicrush
     for (const result of anicrushResults.result.movies) {
         const resultTitles = [
@@ -227,16 +240,19 @@ function findBestMatch(anilistData, anicrushResults) {
                 );
 
                 // Add bonus for year match
+                let currentSimilarity = similarity;
                 if (anilistData.seasonYear && result.aired_from) {
                     const yearMatch = result.aired_from.includes(anilistData.seasonYear.toString());
-                    const currentSimilarity = similarity + (yearMatch ? 15 : 0);
+                    if (yearMatch) currentSimilarity += 15;
+                }
+                
+                // Add bonus for type match
+                if (expectedType && result.type && expectedType === result.type) {
+                    currentSimilarity += 20; // Higher bonus for type match
+                }
 
-                    if (currentSimilarity > highestSimilarity) {
-                        highestSimilarity = currentSimilarity;
-                        bestMatch = result;
-                    }
-                } else if (similarity > highestSimilarity) {
-                    highestSimilarity = similarity;
+                if (currentSimilarity > highestSimilarity) {
+                    highestSimilarity = currentSimilarity;
                     bestMatch = result;
                 }
             }
