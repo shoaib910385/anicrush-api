@@ -234,21 +234,35 @@ function findBestMatch(anilistData, anicrushResults) {
         for (const resultTitle of resultTitles) {
             // Try each possible title combination
             for (const title of titles) {
-                const similarity = calculateTitleSimilarity(
-                    normalizeTitle(title),
-                    normalizeTitle(resultTitle)
-                );
+                // Remove common words that might cause false matches
+                const cleanTitle1 = normalizeTitle(title).replace(/\b(season|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th|14th|15th|16th|17th|18th|19th|20th|21st|22nd|23rd|24th|25th|26th|27th|28th|29th|30th|31st|32nd|33rd|34th|35th|36th|37th|38th|39th|40th|41st|42nd|43rd|44th|45th|46th|47th|48th|49th|50th)\b/gi, '');
+                const cleanTitle2 = normalizeTitle(resultTitle).replace(/\b(season|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th|13th|14th|15th|16th|17th|18th|19th|20th|21st|22nd|23rd|24th|25th|26th|27th|28th|29th|30th|31st|32nd|33rd|34th|35th|36th|37th|38th|39th|40th|41st|42nd|43rd|44th|45th|46th|47th|48th|49th|50th)\b/gi, '');
+
+                const similarity = calculateTitleSimilarity(cleanTitle1, cleanTitle2);
 
                 // Add bonus for year match
                 let currentSimilarity = similarity;
                 if (anilistData.seasonYear && result.aired_from) {
                     const yearMatch = result.aired_from.includes(anilistData.seasonYear.toString());
-                    if (yearMatch) currentSimilarity += 15;
+                    if (yearMatch) currentSimilarity += 10; // Reduced from 15 to 10
                 }
                 
                 // Add bonus for type match
                 if (expectedType && result.type && expectedType === result.type) {
-                    currentSimilarity += 20; // Higher bonus for type match
+                    currentSimilarity += 10; // Reduced from 20 to 10
+                }
+
+                // Add penalty for significant length difference
+                const lengthDiff = Math.abs(cleanTitle1.length - cleanTitle2.length);
+                if (lengthDiff > 10) {
+                    currentSimilarity -= (lengthDiff * 0.5);
+                }
+
+                // Add penalty for completely different first words
+                const firstWord1 = cleanTitle1.split(' ')[0];
+                const firstWord2 = cleanTitle2.split(' ')[0];
+                if (firstWord1 && firstWord2 && firstWord1 !== firstWord2) {
+                    currentSimilarity -= 20;
                 }
 
                 if (currentSimilarity > highestSimilarity) {
@@ -261,7 +275,7 @@ function findBestMatch(anilistData, anicrushResults) {
 
     // Only return a match if similarity is above threshold
     console.log(`Best match found with similarity: ${highestSimilarity}%`);
-    return highestSimilarity >= 60 ? bestMatch : null;
+    return highestSimilarity >= 70 ? bestMatch : null; // Increased threshold from 60 to 70
 }
 
 // Function to parse episode list response
