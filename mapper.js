@@ -248,11 +248,23 @@ function findBestMatch(anilistData, anicrushResults) {
                 }
                 
                 // Add bonus for type match
-                if (expectedType && result.type && expectedType === result.type) {
-                    currentSimilarity += 10; // Reduced from 20 to 10
+                if (expectedType && result.type) {
+                    if (expectedType === result.type) {
+                        currentSimilarity += 25; // Increased from 10 to 25
+                    } else {
+                        currentSimilarity -= 30; // Add significant penalty for type mismatch
+                    }
                 }
 
-                // Add penalty for significant length difference
+                // Add penalty for episode count mismatch (if available)
+                if (anilistData.episodes && result.episodes_count) {
+                    const episodeDiff = Math.abs(anilistData.episodes - result.episodes_count);
+                    if (episodeDiff > 2) { // Allow small differences
+                        currentSimilarity -= (episodeDiff * 2);
+                    }
+                }
+
+                // Add penalty for length difference
                 const lengthDiff = Math.abs(cleanTitle1.length - cleanTitle2.length);
                 if (lengthDiff > 10) {
                     currentSimilarity -= (lengthDiff * 0.5);
