@@ -240,6 +240,72 @@ app.get('/api/anime/hls/:movieId', async (req, res) => {
     }
 });
 
+// Combined endpoint to get HLS link directly from AniList ID
+app.get('/api/anime/:anilistId/:episodeNum', async (req, res) => {
+    try {
+        const { anilistId, episodeNum } = req.params;
+        const { server = 4, subOrDub = 'sub' } = req.query;
+
+        if (!anilistId) {
+            return res.status(400).json({ error: 'AniList ID is required' });
+        }
+
+        // First map AniList ID to Anicrush ID
+        const mappedData = await mapAniListToAnicrush(anilistId);
+        
+        if (!mappedData || !mappedData.anicrush_id) {
+            return res.status(404).json({ error: 'Anime not found on Anicrush' });
+        }
+        
+        const movieId = mappedData.anicrush_id;
+        const headers = getCommonHeaders();
+
+        // Get the embed link
+        const embedResponse = await axios({
+            method: 'GET',
+            url: `https://api.anicrush.to/shared/v2/episode/sources`,
+            params: {
+                _movieId: movieId,
+                ep: episodeNum || 1,
+                sv: server,
+                sc: subOrDub
+            },
+            headers
+        });
+
+        if (!embedResponse.data || embedResponse.data.status === false) {
+            return res.status(404).json({ error: 'Embed link not found' });
+        }
+
+        const embedUrl = embedResponse.data.result.link;
+        
+        // Get HLS link from embed URL
+        const hlsData = await getHlsLink(embedUrl);
+        
+        // Add metadata from the mapped data
+        const response = {
+            ...hlsData,
+            metadata: {
+                title: mappedData.titles?.english || mappedData.titles?.romaji,
+                anilistId: parseInt(anilistId),
+                movieId: movieId,
+                episode: parseInt(episodeNum) || 1,
+                server: parseInt(server) || 4,
+                subOrDub: subOrDub || 'sub'
+            }
+        };
+        
+        res.json(response);
+
+    } catch (error) {
+        console.error('Error fetching anime stream:', error);
+        res.status(500).json({
+            error: 'Failed to fetch anime stream',
+            message: error.message
+        });
+    }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'OK' });
