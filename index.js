@@ -282,6 +282,10 @@ app.get('/api/anime/:anilistId/:episodeNum', async (req, res) => {
         // Get HLS link from embed URL
         const hlsData = await getHlsLink(embedUrl);
         
+        // Find the specific episode data
+        const episodeNumber = parseInt(episodeNum) || 1;
+        const episodeData = mappedData.episodes.find(ep => ep.number === episodeNumber) || {};
+        
         // Add metadata from the mapped data
         const response = {
             ...hlsData,
@@ -289,9 +293,10 @@ app.get('/api/anime/:anilistId/:episodeNum', async (req, res) => {
                 title: mappedData.titles?.english || mappedData.titles?.romaji,
                 anilistId: parseInt(anilistId),
                 movieId: movieId,
-                episode: parseInt(episodeNum) || 1,
+                episode: episodeNumber,
                 server: parseInt(server) || 4,
-                subOrDub: subOrDub || 'sub'
+                subOrDub: subOrDub || 'sub',
+                image: episodeData.image || null
             }
         };
         
