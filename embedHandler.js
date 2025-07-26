@@ -1,150 +1,159 @@
-const axios = require('axios');
-const crypto = require('node:crypto');
+import axios from 'axios';
 
-class EmbedSource {
-    constructor(file, sourceType) {
-        this.file = file;
-        this.type = sourceType;
-    }
+const MAIN_URL = "https://megacloud.blog";
+const KEY_URL = "https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json";
+const DECODE_URL = "https://script.google.com/macros/s/AKfycbx-yHTwupis_JD0lNzoOnxYcEYeXmJZrg7JeMxYnEZnLBy5V0--UxEvP-y9txHyy1TX9Q/exec";
+const USER_AGENT =
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36";
+
+export type track = {
+  file: string;
+  label?: string;
+  kind: string;
+  default?: boolean;
+};
+
+export type unencryptedSrc = {
+  file: string;
+  type: string;
+};
+
+export type extractedSrc = {
+  sources: string | unencryptedSrc[];
+  tracks: track[];
+  t: number;
+  server: number;
+};
+
+type ExtractedData = Pick<extractedSrc, "tracks" | "t" | "server"> & {
+  sources: { file: string; type: string }[];
+};
+
+// 🛠 Decrypt using Google Apps Script
+async function decryptWithGoogleScript(
+  encryptedData: string,
+  nonce: string,
+  secret: string
+): Promise<string> {
+  try {
+    const params = new URLSearchParams({
+      encrypted_data: encryptedData,
+      nonce: nonce,
+      secret: secret,
+    });
+
+    const { data } = await axios.get(`${DECODE_URL}?${params.toString()}`);
+
+    const fileMatch = data.match(/"file":"(.*?)"/)?.[1];
+    if (!fileMatch) throw new Error('Video URL not found in decrypted response');
+    return fileMatch;
+  } catch (error: any) {
+    console.error('Google Apps Script decryption failed:', error.message);
+    throw error;
+  }
 }
 
-class Track {
-    constructor(file, label, kind, isDefault = false) {
-        this.file = file;
-        this.label = label;
-        this.kind = kind;
-        if (isDefault) {
-            this.default = isDefault;
-        }
-    }
+// 🧠 Extract nonce from embed HTML
+function extractNonce(html: string): string | null {
+  const match1 = html.match(/\b[a-zA-Z0-9]{48}\b/);
+  if (match1) return match1[0];
+
+  const match2 = html.match(/\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b.*?\b([a-zA-Z0-9]{16})\b/);
+  if (match2) return match2[1] + match2[2] + match2[3];
+
+  return null;
 }
 
-class EmbedSources {
-    constructor(sources = [], tracks = [], t = 0, server = 1, intro = null, outro = null) {
-        this.sources = sources;
-        this.tracks = tracks;
-        this.t = t;
-        this.server = server;
-        if (intro) this.intro = intro;
-        if (outro) this.outro = outro;
+export class MegaCloud {
+  static async extract(url: string): Promise<{ sources: any[]; tracks?: track[] }> {
+    try {
+      const embedUrl = new URL(url);
+      const instance = new MegaCloud();
+      const result = await instance.extract2(embedUrl);
+      return {
+        sources: result.sources,
+        tracks: result.tracks,
+      };
+    } catch (err: any) {
+      console.error("MegaCloud extraction error:", err.message);
+      return { sources: [] };
     }
-}
+  }
 
-const MEGACLOUD_URL = 'https://megacloud.blog';
-const KEY_URL = 'https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json';
-
-function opensslKeyIv(password, salt, keyLen = 32, ivLen = 16) {
-    let d = Buffer.alloc(0);
-    let prev = Buffer.alloc(0);
-
-    while (d.length < keyLen + ivLen) {
-        const hash = crypto.createHash('md5');
-        hash.update(Buffer.concat([prev, password, salt]));
-        prev = hash.digest();
-        d = Buffer.concat([d, prev]);
-    }
-
-    return {
-        key: d.subarray(0, keyLen),
-        iv: d.subarray(keyLen, keyLen + ivLen),
+  async extract2(embedIframeURL: URL): Promise<ExtractedData> {
+    const extractedData: ExtractedData = {
+      sources: [],
+      tracks: [],
+      t: 0,
+      server: 0,
     };
-}
 
-function decryptOpenSSL(encBase64, password) {
     try {
-        const data = Buffer.from(encBase64, 'base64');
-        if (data.subarray(0, 8).toString() !== 'Salted__') return null;
+      const id = embedIframeURL.pathname.split("/").pop()?.split("?")[0] || "";
+      let nonce: string | null = null;
 
-        const salt = data.subarray(8, 16);
-        const { key, iv } = opensslKeyIv(Buffer.from(password, 'utf8'), salt);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        const decrypted = Buffer.concat([
-            decipher.update(data.subarray(16)),
-            decipher.final(),
-        ]);
-        return decrypted.toString('utf-8');
-    } catch (err) {
-        console.error('Decryption error:', err.message);
-        return null;
-    }
-}
+      const { data: html } = await axios.get<string>(embedIframeURL.href, {
+        headers: {
+          Accept: '*/*',
+          'X-Requested-With': 'XMLHttpRequest',
+          Referer: MAIN_URL,
+          'User-Agent': USER_AGENT,
+        },
+      });
 
-function extractId(url) {
-    return url.split('/').pop().split('?')[0];
-}
+      nonce = extractNonce(html);
+      if (!nonce) throw new Error("Nonce not found");
 
-async function getDecryptionKey() {
-    try {
-        const res = await axios.get(KEY_URL);
-        return typeof res.data === 'string' ? JSON.parse(res.data).mega : res.data?.mega;
-    } catch (e) {
-        console.error('Failed to fetch key:', e.message);
-        return null;
-    }
-}
+      const apiUrl = `${MAIN_URL}/embed-1/v3/e-1/getSources?id=${id}&_k=${nonce}`;
+      const headers = {
+        Accept: '*/*',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: MAIN_URL,
+        'User-Agent': USER_AGENT,
+      };
 
-const handleEmbed = async (embedUrl, referrer = 'https://megacloud.blog') => {
-    try {
-        if (!embedUrl) throw new Error('embedUrl is required');
+      const { data } = await axios.get<extractedSrc>(apiUrl, { headers });
+      if (!data) return extractedData;
 
-        const id = extractId(embedUrl);
-        const apiUrl = `${MEGACLOUD_URL}/embed-2/v2/e-1/getSources?id=${id}`;
+      // 🔐 Encrypted source (string)
+      if (typeof data.sources === 'string') {
+        try {
+          if (data.sources.includes('.m3u8')) {
+            extractedData.sources = [{ file: data.sources, type: 'hls' }];
+          } else {
+            const { data: keyData } = await axios.get(KEY_URL);
+            const secret = keyData?.mega;
 
-        const headers = {
-            Referer: referrer,
-            Origin: 'https://megacloud.blog/',
-            'User-Agent': 'Mozilla/5.0',
-        };
+            if (!secret) throw new Error('No decryption key found for MegaCloud');
 
-        const { data } = await axios.get(apiUrl, { headers });
-        if (!data?.sources) throw new Error('No sources field in response');
+            const decryptedUrl = await decryptWithGoogleScript(data.sources, nonce, secret);
 
-        let rawSources;
-        if (typeof data.sources === 'string') {
-            try {
-                rawSources = JSON.parse(data.sources);
-            } catch (_) {
-                const key = await getDecryptionKey();
-                if (!key) throw new Error('Failed to fetch decryption key');
-                const decrypted = decryptOpenSSL(data.sources, key);
-                if (!decrypted) throw new Error('Decryption failed');
-                rawSources = JSON.parse(decrypted);
-            }
-        } else if (Array.isArray(data.sources)) {
-            rawSources = data.sources;
-        } else {
-            throw new Error('Unexpected sources format');
+            extractedData.sources = [{ file: decryptedUrl, type: 'hls' }];
+          }
+        } catch (err: any) {
+          console.error("Failed to decrypt video source:", err.message);
         }
+      }
 
-        if (!Array.isArray(rawSources) || rawSources.length === 0) {
-            throw new Error('No valid sources found');
-        }
+      // 🔓 Unencrypted source (array)
+      else if (Array.isArray(data.sources)) {
+        extractedData.sources = data.sources.map(src => ({
+          file: src.file,
+          type: src.type || 'hls',
+        }));
+      }
 
-        const sources = rawSources.map((s) =>
-            new EmbedSource(s.file, s.type || s.quality || 'unknown')
-        );
+      // 🧾 Subtitles/tracks
+      extractedData.tracks = (data.tracks || []).filter(track =>
+        track.kind === 'captions' || track.kind === 'subtitles'
+      );
+      extractedData.t = data.t || 0;
+      extractedData.server = data.server || 0;
 
-        const tracks = Array.isArray(data.tracks)
-            ? data.tracks.map((t) => new Track(t.file, t.label, t.kind, t.default))
-            : [];
-
-        return new EmbedSources(
-            sources,
-            tracks,
-            data.t ?? 0,
-            1,
-            data.intro ?? null,
-            data.outro ?? null
-        );
-    } catch (error) {
-        console.error('Embed extraction error:', error.message);
-        throw error;
+      return extractedData;
+    } catch (err: any) {
+      console.error("Extraction error in extract2:", err.message);
+      return extractedData;
     }
-};
-
-module.exports = {
-    handleEmbed,
-    EmbedSource,
-    Track,
-    EmbedSources
-};
+  }
+}
