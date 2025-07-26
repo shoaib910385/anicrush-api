@@ -30,11 +30,9 @@ class EmbedSources {
     }
 }
 
-// Constants for Megacloud
 const MEGACLOUD_URL = 'https://megacloud.blog';
 const KEY_URL = 'https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json';
 
-// --- OpenSSL-compatible key+IV derivation (same algorithm used by Megacloud)
 function opensslKeyIv(password, salt, keyLen = 32, ivLen = 16) {
     let d = Buffer.alloc(0);
     let prev = Buffer.alloc(0);
@@ -52,7 +50,6 @@ function opensslKeyIv(password, salt, keyLen = 32, ivLen = 16) {
     };
 }
 
-// --- Decrypt OpenSSL AES-CBC encoded Base64 payloads
 function decryptOpenSSL(encBase64, password) {
     try {
         const data = Buffer.from(encBase64, 'base64');
@@ -72,7 +69,6 @@ function decryptOpenSSL(encBase64, password) {
     }
 }
 
-// --- Helpers
 function extractId(url) {
     return url.split('/').pop().split('?')[0];
 }
@@ -95,7 +91,7 @@ const handleEmbed = async (embedUrl, referrer = 'https://megacloud.blog') => {
         const apiUrl = `${MEGACLOUD_URL}/embed-2/v2/e-1/getSources?id=${id}`;
 
         const headers = {
-            Referer: referrer || embedUrl,
+            Referer: referrer,
             Origin: 'https://megacloud.blog/',
             'User-Agent': 'Mozilla/5.0',
         };
@@ -103,7 +99,6 @@ const handleEmbed = async (embedUrl, referrer = 'https://megacloud.blog') => {
         const { data } = await axios.get(apiUrl, { headers });
         if (!data?.sources) throw new Error('No sources field in response');
 
-        // Parse/Decrypt sources array
         let rawSources;
         if (typeof data.sources === 'string') {
             try {
@@ -121,20 +116,28 @@ const handleEmbed = async (embedUrl, referrer = 'https://megacloud.blog') => {
             throw new Error('Unexpected sources format');
         }
 
-        if (!rawSources.length) throw new Error('No valid sources found');
+        if (!Array.isArray(rawSources) || rawSources.length === 0) {
+            throw new Error('No valid sources found');
+        }
 
-        const sources = rawSources.map((s) => new EmbedSource(s.file, s.type || s.quality || 'unknown'));
-        const tracks = (data.tracks || []).map((t) => new Track(t.file, t.label, t.kind, t.default));
+        const sources = rawSources.map((s) =>
+            new EmbedSource(s.file, s.type || s.quality || 'unknown')
+        );
+
+        const tracks = Array.isArray(data.tracks)
+            ? data.tracks.map((t) => new Track(t.file, t.label, t.kind, t.default))
+            : [];
 
         return new EmbedSources(
             sources,
             tracks,
             data.t ?? 0,
-            'megacloud',
+            1,
             data.intro ?? null,
             data.outro ?? null
         );
     } catch (error) {
+        console.error('Embed extraction error:', error.message);
         throw error;
     }
 };
@@ -144,4 +147,4 @@ module.exports = {
     EmbedSource,
     Track,
     EmbedSources
-}; 
+};
