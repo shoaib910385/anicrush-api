@@ -1,3 +1,5 @@
+https://vercel.com/new/clone?repository-url=https://github.com/shoaib910385/anicrush-api
+
 # Anime Sources API
 
 A simple API wrapper for fetching anime sources from anicrush.to.
@@ -174,3 +176,4 @@ The API will return appropriate error messages with corresponding HTTP status co
 - The API includes necessary headers for authentication
 - CORS is enabled for cross-origin requests
 - The server runs on port 3000 by default (can be changed via PORT environment variable) 
+
